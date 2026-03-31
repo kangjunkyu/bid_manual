@@ -2,10 +2,8 @@ name: Gong-go Bot Automation
 
 on:
   schedule:
-    # UTC 기준 (KST 18시는 UTC 09시)
-    # 6시간 간격: 한국시간 00시, 06시, 12시, 18시 실행
     - cron: '0 15,21,3,9 * * *'
-  workflow_dispatch: # 버튼 눌러서 수동 실행 가능하게 함
+  workflow_dispatch:
 
 jobs:
   run-bot:
@@ -17,11 +15,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.13'
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install -r dev/requirements.txt
 
       - name: Execute Script
         env:
@@ -29,19 +27,17 @@ jobs:
           NAVER_PW: ${{ secrets.NAVER_PW }}
           API_KEY: ${{ secrets.API_KEY }}
         run: |
-          # 현재 시간(UTC)을 확인해서 09시(KST 18시)면 'send' 인자 전달
           CURRENT_HOUR=$(date +%H)
           if [ "$CURRENT_HOUR" == "09" ]; then
-            python main.py send
+            python dev/main.py send
           else
-            python main.py
+            python dev/main.py
           fi
 
       - name: Commit and Push DB updates
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add sent_list.db
-          # DB에 변화가 있을 때만 커밋
-          git commit -m "Update sent_list.db" || exit 0
+          git add dev/sent_list.db
+          git commit -m "Update dev/sent_list.db" || exit 0
           git push
