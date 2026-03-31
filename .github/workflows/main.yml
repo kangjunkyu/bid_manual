@@ -29,9 +29,9 @@ jobs:
         run: |
           CURRENT_HOUR=$(date +%H)
           if [ "$CURRENT_HOUR" == "09" ]; then
-            python dev/main.py send
+            python dev/Scuedule.py send
           else
-            python dev/main.py
+            python dev/Schedule.py
           fi
 
       - name: Commit and Push DB updates
