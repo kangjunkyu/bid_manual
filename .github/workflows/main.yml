@@ -1,0 +1,43 @@
+name: Gong-go Bot Automation
+
+on:
+  schedule:
+    - cron: '0 15,21,3,9 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          pip install -r dev/requirements.txt
+
+      - name: Execute Script
+        env:
+          NAVER_ID: ${{ secrets.NAVER_ID }}
+          NAVER_PW: ${{ secrets.NAVER_PW }}
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          CURRENT_HOUR=$(date +%H)
+          if [ "$CURRENT_HOUR" == "09" ]; then
+            python dev/main.py send
+          else
+            python dev/main.py
+          fi
+
+      - name: Commit and Push DB updates
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add dev/sent_list.db
+          git commit -m "Update dev/sent_list.db" || exit 0
+          git push
