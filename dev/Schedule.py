@@ -3,11 +3,13 @@ import smtplib
 import sqlite3
 import sys
 import os
+# from dotenv import load_dotenv
 
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 
+# load_dotenv()
 NAVER_ID = os.getenv('NAVER_ID')
 NAVER_PW = os.getenv('NAVER_PW')
 API_KEY = os.getenv('API_KEY')
@@ -170,8 +172,13 @@ def get_combined_data():
                         >= total_count
                     ):
                         break
+                    
+                    page_no +=1
 
-                    page_no += 1
+                    if page_no > 10: 
+                            break
+                else:
+                    print(f"API 응답 에러 ({response.status_code})")
                     break
             except Exception as e:
                 print(f"{category} 에러 발생: {e}")
@@ -232,10 +239,10 @@ def load_sent_list():
     except FileNotFoundError:
         return set()
 
-
-def save_sent_id(bid_id):
-    with open(SAVE_FILE, "a") as f:
-        f.write(bid_id + "\n")
+# txt 파일 저장 [더이상 안씀]
+# def save_sent_id(bid_id):
+#     with open(SAVE_FILE, "a") as f:
+#         f.write(bid_id + "\n")
 
 
 def send_naver_email(content_html):
