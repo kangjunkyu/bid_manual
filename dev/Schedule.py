@@ -3,6 +3,7 @@ import smtplib
 import sqlite3
 import sys
 import os
+
 # from dotenv import load_dotenv
 
 from email.mime.text import MIMEText
@@ -10,9 +11,9 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 
 # load_dotenv()
-NAVER_ID = os.getenv('NAVER_ID')
-NAVER_PW = os.getenv('NAVER_PW')
-API_KEY = os.getenv('API_KEY')
+NAVER_ID = os.getenv("NAVER_ID")
+NAVER_PW = os.getenv("NAVER_PW")
+API_KEY = os.getenv("API_KEY")
 
 KEYWORDS = [
     # "문서중앙",
@@ -98,34 +99,50 @@ BIZINFO_URL = (
     "http://apis.data.go.kr/1721000/msitannouncementinfo/businessAnnouncMentList"
 )
 
+
 def init_db():
-    conn = sqlite3.connect('sent_list.db')
+    conn = sqlite3.connect("sent_list.db")
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS sent_bids (
             bid_id TEXT PRIMARY KEY,
-            found_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            found_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            is_sent INTEGER DEFAULT 0
         )
-    ''')
+    """
+    )
     conn.commit()
     conn.close()
 
-def is_already_sent(bid_id):
-    conn = sqlite3.connect('sent_list.db')
+
+def is_already_stored(bid_id):
+    conn = sqlite3.connect("sent_list.db")
     cursor = conn.cursor()
-    cursor.execute('SELECT 1 FROM sent_bids WHERE bid_id = ?', (bid_id,))
+    cursor.execute("SELECT 1 FROM sent_bids WHERE bid_id = ?", (bid_id,))
     result = cursor.fetchone()
     conn.close()
     return result is not None
 
-def save_sent_id(bid_id):
-    conn = sqlite3.connect('sent_list.db')
+
+def save_bid_to_db(bid_id):
+    conn = sqlite3.connect("sent_list.db")
     cursor = conn.cursor()
     try:
-        cursor.execute('INSERT INTO sent_bids (bid_id) VALUES (?)', (bid_id,))
+        cursor.execute(
+            "INSERT INTO sent_bids (bid_id, is_sent) VALUES (?, 0)", (bid_id,)
+        )
         conn.commit()
     except sqlite3.IntegrityError:
         pass
+    conn.close()
+
+
+def mask_as_sent():
+    conn = sqlite3.connect("sent_list.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE sent_bids SET is_sent = 1 WHERE is_sent = 0")
+    conn.commit()
     conn.close()
 
 
@@ -172,11 +189,11 @@ def get_combined_data():
                         >= total_count
                     ):
                         break
-                    
-                    page_no +=1
 
-                    if page_no > 10: 
-                            break
+                    page_no += 1
+
+                    if page_no > 10:
+                        break
                 else:
                     print(f"API 응답 에러 ({response.status_code})")
                     break
@@ -198,13 +215,12 @@ def get_bizinfo_data():
 
     try:
         response = requests.get(BIZINFO_URL, params=params, timeout=10)
-        print(response.status_code)
         if response.status_code == 200:
             data = response.json()
             resp_list = data.get("response", [])
 
             if len(resp_list) >= 2:
-                body = resp_list[1].get("body", {}) 
+                body = resp_list[1].get("body", {})
                 items_wrapper = body.get("items", [])
 
                 for wrapper in items_wrapper:
@@ -239,6 +255,7 @@ def load_sent_list():
     except FileNotFoundError:
         return set()
 
+
 # txt 파일 저장 [더이상 안씀]
 # def save_sent_id(bid_id):
 #     with open(SAVE_FILE, "a") as f:
@@ -249,7 +266,9 @@ def send_naver_email(content_html):
     global NAVER_ID, NAVER_PW
 
     msg = MIMEMultipart()
-    msg["Subject"] = f"[{datetime.now().strftime('%Y-%m-%d')}] 나라장터 & 정부사업 신규 공고 알림"
+    msg["Subject"] = (
+        f"[{datetime.now().strftime('%Y-%m-%d')}] 나라장터 & 정부사업 신규 공고 알림"
+    )
 
     msg["From"] = f"{NAVER_ID}@naver.com"
 
@@ -278,29 +297,33 @@ def send_naver_email(content_html):
 
 def main():
     init_db()
-    
     is_mail_time = len(sys.argv) > 1 and sys.argv[1] == "send"
-    
+
     nara_raw = get_combined_data()
     biz_raw = get_bizinfo_data()
 
     categorized_results = {kw: {"nara": [], "gov": []} for kw in KEYWORDS}
     categorized_results["기타 지원사업"] = {"nara": [], "gov": []}
 
-    new_found = False
-
     for item in nara_raw:
         bid_nm = item.get("bidNtceNm", "")
         bid_id = f"{item.get('bidNtceNo')}-{item.get('bidNtceOrd', '00')}"
 
-        if is_already_sent(bid_id):
-            continue
         if any(nk in bid_nm for nk in NEGATIVE_KEYWORDS):
             continue
 
+        matched_kw = None
         for kw in KEYWORDS:
             if kw in bid_nm:
-                categorized_results[kw]["nara"].append(
+                matched_kw = kw
+                break
+
+        if matched_kw:
+            if not is_already_stored(bid_id):
+                save_bid_to_db(bid_id)
+
+            if is_not_yet_sent(bid_id):
+                categorized_results[matched_kw]["nara"].append(
                     {
                         "category": item.get("category", "입찰"),
                         "title": bid_nm,
@@ -309,17 +332,12 @@ def main():
                         "end": item.get("bidClseDt"),
                     }
                 )
-                save_sent_id(bid_id)
-                new_found = True
-                break
 
     for item in biz_raw:
         bid_nm = item.get("bidNtceNm") or item.get("pblancNm", "제목 없음")
-        bid_no = item.get('bidNtceNo') or item.get('pblancId')
+        bid_no = item.get("bidNtceNo") or item.get("pblancId")
         bid_id = f"{bid_no}-00"
 
-        if is_already_sent(bid_id):
-            continue
         if any(nk in bid_nm for nk in NEGATIVE_KEYWORDS):
             continue
 
@@ -329,40 +347,52 @@ def main():
                 matched_kw = kw
                 break
 
-        categorized_results[matched_kw]["gov"].append(
-            {
-                "category": "지원사업",
-                "title": bid_nm,
-                "org": item.get("ntceInsttNm") or item.get("excutInsttNm"),
-                "url": item.get("bidNtceDtlUrl")
-                or (
-                    "https://www.bizinfo.go.kr/saw/saw0101V.do?pblancId="
-                    + item.get("pblancId", "")
-                ),
-                "end": item.get("bidClseDt") or item.get("reqstEndDt"),
-            }
-        )
-        save_sent_id(bid_id)
-        new_found = True
+        if not is_already_stored(bid_id):
+            save_bid_to_db(bid_id)
 
-    if not new_found:
-        print("신규 공고가 없어 메일을 발송하지 않습니다.")
-        return
-    
+        if is_not_yet_sent(bid_id):
+            categorized_results[matched_kw]["gov"].append(
+                {
+                    "category": "지원사업",
+                    "title": bid_nm,
+                    "org": item.get("ntceInsttNm") or item.get("excutInsttNm"),
+                    "url": item.get("bidNtceDtlUrl")
+                    or (
+                        "https://www.bizinfo.go.kr/saw/saw0101V.do?pblancId="
+                        + item.get("pblancId", "")
+                    ),
+                    "end": item.get("bidClseDt") or item.get("reqstEndDt"),
+                }
+            )
+
+    has_content = any(src["nara"] or src["gov"] for src in categorized_results.values())
+
     if is_mail_time:
-        print(f"{datetime.now} 메일을 발송합니다.")
-        send_email(categorized_results)
+        if has_content:
+            print(f"[{datetime.now()}] 메일을 발송합니다.")
+            send_email(categorized_results)
+            mask_as_sent()
+        else:
+            print("발송할 신규 공고가 없습니다.")
     else:
-        print(f"{datetime.now} 데이터 수집 성공")
+        print(f"[{datetime.now()}] 데이터 수집 완료 (DB 저장)")
 
+
+def is_not_yet_sent(bid_id):
+    conn = sqlite3.connect("sent_list.db")
+    cur = conn.cursor()
+    cur.execute("SELECT is_sent FROM sent_bids WHERE bid_id = ?", (bid_id,))
+    row = cur.fetchone()
+    conn.close()
+    return row and row[0] == 0
 
 
 def send_email(categorized_results):
     today_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    
-    MINT_COLOR = "#29C1C1" 
+
+    MINT_COLOR = "#29C1C1"
     DEEP_BLUE_COLOR = "#004BA0"
-    
+
     html = f"""
     <div style="width: 100%; background-color: #f4f4f4; padding: 20px 0; font-family: 'Malgun Gothic', sans-serif;">
         <table align="center" border="0" cellpadding="0" cellspacing="0" width="620" style="background-color: #ffffff; border: 1px solid #dddddd;">
@@ -425,7 +455,7 @@ def send_email(categorized_results):
             </tr>
             <tr><td style="padding: 30px 20px; text-align: center; font-size: 12px; color: #999; line-height: 1.6;">
                 본 리포트는 설정된 키워드에 따라 시스템에서 자동 생성되었습니다.<br/>
-                © 엠클라우독 기술연구소
+                © 엠클라우독 영업팀
             </td></tr>
         </table>
     </div>
