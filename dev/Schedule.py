@@ -16,11 +16,6 @@ NAVER_PW = os.getenv("NAVER_PW")
 API_KEY = os.getenv("API_KEY")
 
 KEYWORDS = [
-    # "문서중앙",
-    # "문서집중",
-    # "문서관리",
-    "문서관리",
-    "문서보안",
     "문서",
     "보안",
     "정보",
@@ -28,8 +23,8 @@ KEYWORDS = [
     "디지털",
     "ECM",
     "EDMS",
+    "솔루션"
 ]
-SAVE_FILE = "sent_bid_list.txt"
 NEGATIVE_KEYWORDS = [
     "CCTV",
     "청소",
@@ -98,7 +93,6 @@ BASE_URL = "http://apis.data.go.kr/1230000/ad/BidPublicInfoService"
 BIZINFO_URL = (
     "http://apis.data.go.kr/1721000/msitannouncementinfo/businessAnnouncMentList"
 )
-
 
 def init_db():
     conn = sqlite3.connect("sent_list.db")
@@ -247,21 +241,6 @@ def get_bizinfo_data():
         print(f"기업마당 에러 발생: {e}")
     return all_items
 
-
-def load_sent_list():
-    try:
-        with open(SAVE_FILE, "r") as f:
-            return set(f.read().splitlines())
-    except FileNotFoundError:
-        return set()
-
-
-# txt 파일 저장 [더이상 안씀]
-# def save_sent_id(bid_id):
-#     with open(SAVE_FILE, "a") as f:
-#         f.write(bid_id + "\n")
-
-
 def send_naver_email(content_html):
     global NAVER_ID, NAVER_PW
 
@@ -272,12 +251,12 @@ def send_naver_email(content_html):
 
     msg["From"] = f"{NAVER_ID}@naver.com"
 
-    # to_list = ["rootforyou@mcloudoc.com"]
-    # cc_list = ["hgchoi@mcloudoc.com", "mjhwang@mcloudoc.com", "wnsrb933@mcloudoc.com", "kaspi0402@mcloudoc.com"]
+    to_list = ["rootforyou@mcloudoc.com"]
+    cc_list = ["hgchoi@mcloudoc.com", "mjhwang@mcloudoc.com", "wnsrb933@mcloudoc.com", "kaspi0402@mcloudoc.com"]
 
     # TEST
-    to_list = ["wnsrb933@mcloudoc.com"]
-    cc_list = ["wnsrb933@naver.com"]
+    # to_list = ["wnsrb933@mcloudoc.com"]
+    # cc_list = ["wnsrb933@naver.com"]
 
     msg["To"] = ", ".join(to_list)
     msg["Cc"] = ", ".join(cc_list)
