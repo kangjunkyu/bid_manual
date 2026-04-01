@@ -8,10 +8,13 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
+        with:
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -39,5 +42,10 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add dev/sent_list.db
-          git commit -m "Update dev/sent_list.db" || exit 0
-          git push
+          if git diff --staged --quiet; then
+            echo "No changes in DB. Skipping push."
+          else
+            git commit -m "Update dev/sent_list.db [skip ci]"
+            git pull --rebase origin main
+            git push origin main
+          fi
