@@ -5,14 +5,14 @@ import sys
 import os
 import json
 
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 
-load_dotenv()
+# load_dotenv()
 NAVER_ID = os.getenv("NAVER_ID")
 NAVER_PW = os.getenv("NAVER_PW")
 API_KEY = os.getenv("API_KEY")
