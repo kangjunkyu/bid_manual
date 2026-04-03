@@ -3,85 +3,29 @@ import smtplib
 import sqlite3
 import sys
 import os
+import json
 
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 
-# load_dotenv()
+load_dotenv()
 NAVER_ID = os.getenv("NAVER_ID")
 NAVER_PW = os.getenv("NAVER_PW")
 API_KEY = os.getenv("API_KEY")
 
-KEYWORDS = [
-    "문서",
-    "보안",
-    "정보",
-    "전자",
-    "디지털",
-    "ECM",
-    "EDMS",
-    "솔루션"
-]
-NEGATIVE_KEYWORDS = [
-    "CCTV",
-    "청소",
-    "파쇄",
-    "유지관리",
-    "유지보수",
-    "경비",
-    "인력운영",
-    "실험",
-    "위탁",
-    "공사",
-    "식물",
-    "산림",
-    "목재",
-    "유전",
-    "해양",
-    "측정",
-    "분석",
-    "수의",
-    "전자책",
-    "보험",
-    "용역",
-    "시험",
-    "교육",
-    "홍보",
-    "모니터링",
-    "영상",
-    "취약",
-    "장애인",
-    "노인",
-    "어린이",
-    "유아",
-    "컨설팅",
-    "운영",
-    "장치",
-    "라이선스",
-    "점검",
-    "대회",
-    "칠판",
-    "치과",
-    "벌레",
-    "레이저",
-    "현황",
-    "웨이퍼",
-    "시약",
-    "유속",
-    "공무",
-    "치매",
-    "배송",
-    "조리",
-    "산불",
-    "도핑",
-    "입학",
-    "가로수",
-]
-EXCLUDE_CONTRACTS = ["수의"]
+def load_config():
+    with open('dev/config.json', 'r', encoding='utf-8') as f:
+        return json.load(f)
+    
+config = load_config()
+
+KEYWORDS = config['KEYWORDS']
+NEGATIVE_KEYWORDS = config['NEGATIVE_KEYWORDS']
+EXCLUDE_CONTRACTS = config['EXCLUDE_CONTRACTS']
 
 ENDPOINTS = {
     "물품": "/getBidPblancListInfoThngPPSSrch",
@@ -90,6 +34,7 @@ ENDPOINTS = {
     "외자": "/getBidPblancListInfoFrgcptPPSSrch",
     "기타": "/getBidPblancListInfoEtcPPSSrch",
 }
+
 BASE_URL = "http://apis.data.go.kr/1230000/ad/BidPublicInfoService"
 BIZINFO_URL = (
     "http://apis.data.go.kr/1721000/msitannouncementinfo/businessAnnouncMentList"
@@ -99,6 +44,7 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
 }
 
+    
 def get_session():
     session = requests.Session()
     session.headers.update(HEADERS)
@@ -274,12 +220,12 @@ def send_naver_email(content_html):
 
     msg["From"] = f"{NAVER_ID}@naver.com"
 
-    to_list = ["rootforyou@mcloudoc.com"]
-    cc_list = ["hgchoi@mcloudoc.com", "mjhwang@mcloudoc.com", "wnsrb933@mcloudoc.com", "kaspi0402@mcloudoc.com"]
+    # to_list = ["rootforyou@mcloudoc.com"]
+    # cc_list = ["hgchoi@mcloudoc.com", "mjhwang@mcloudoc.com", "wnsrb933@mcloudoc.com", "kaspi0402@mcloudoc.com"]
 
     # TEST
-    # to_list = ["wnsrb933@mcloudoc.com"]
-    # cc_list = ["wnsrb933@naver.com"]
+    to_list = ["wnsrb933@mcloudoc.com"]
+    cc_list = ["wnsrb933@naver.com"]
 
     msg["To"] = ", ".join(to_list)
     msg["Cc"] = ", ".join(cc_list)
@@ -299,7 +245,7 @@ def send_naver_email(content_html):
 
 def main():
     init_db()
-    is_mail_time = len(sys.argv) > 1 and sys.argv[1] == "send"
+    is_mail_time = True
 
     nara_raw = get_combined_data()
     biz_raw = get_bizinfo_data()
