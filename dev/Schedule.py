@@ -5,14 +5,15 @@ import sys
 import os
 import json
 
-# from dotenv import load_dotenv
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 
+# from dotenv import load_dotenv
 # load_dotenv()
+
 NAVER_ID = os.getenv("NAVER_ID")
 NAVER_PW = os.getenv("NAVER_PW")
 API_KEY = os.getenv("API_KEY")
@@ -220,12 +221,12 @@ def send_naver_email(content_html):
 
     msg["From"] = f"{NAVER_ID}@naver.com"
 
-    # to_list = ["rootforyou@mcloudoc.com"]
-    # cc_list = ["hgchoi@mcloudoc.com", "mjhwang@mcloudoc.com", "wnsrb933@mcloudoc.com", "kaspi0402@mcloudoc.com"]
+    to_list = ["rootforyou@mcloudoc.com"]
+    cc_list = ["hgchoi@mcloudoc.com", "mjhwang@mcloudoc.com", "wnsrb933@mcloudoc.com", "kaspi0402@mcloudoc.com"]
 
     # TEST
-    to_list = ["wnsrb933@mcloudoc.com"]
-    cc_list = ["wnsrb933@naver.com"]
+    # to_list = ["wnsrb933@mcloudoc.com"]
+    # cc_list = ["wnsrb933@naver.com"]
 
     msg["To"] = ", ".join(to_list)
     msg["Cc"] = ", ".join(cc_list)
@@ -245,7 +246,7 @@ def send_naver_email(content_html):
 
 def main():
     init_db()
-    is_mail_time = True
+    is_mail_time = len(sys.argv) > 1 and sys.argv[1] == "send"
 
     nara_raw = get_combined_data()
     biz_raw = get_bizinfo_data()
