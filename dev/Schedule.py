@@ -5,7 +5,8 @@ import sys
 import os
 
 # from dotenv import load_dotenv
-
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
@@ -94,6 +95,26 @@ BIZINFO_URL = (
     "http://apis.data.go.kr/1721000/msitannouncementinfo/businessAnnouncMentList"
 )
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+}
+
+def get_session():
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    
+    retry = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504],
+        raise_on_status=False
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    
+    return session
+
 def init_db():
     conn = sqlite3.connect("sent_list.db")
     cursor = conn.cursor()
@@ -142,6 +163,7 @@ def mask_as_sent():
 
 def get_combined_data():
     all_items = []
+    session = get_session()
     now = datetime.now()
     yesterday = now - timedelta(days=1)
     n = now.strftime("%Y%m%d%H%M")
@@ -161,7 +183,7 @@ def get_combined_data():
             }
 
             try:
-                response = requests.get(BASE_URL + path, params=params, timeout=10)
+                response = session.get(BASE_URL + path, params=params, timeout=30)
                 if response.status_code == 200:
                     data = response.json()
                     body = data.get("response", {}).get("body", {})
@@ -206,9 +228,10 @@ def get_bizinfo_data():
         "numOfRows": "999",
         "returnType": "json",
     }
+    session = get_session()
 
     try:
-        response = requests.get(BIZINFO_URL, params=params, timeout=10)
+        response = session.get(BIZINFO_URL, params=params, timeout=30)
         if response.status_code == 200:
             data = response.json()
             resp_list = data.get("response", [])
