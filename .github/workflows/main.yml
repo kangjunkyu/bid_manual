@@ -31,7 +31,8 @@ jobs:
           API_KEY: ${{ secrets.API_KEY }}
         run: |
           CURRENT_HOUR=$(date +%H)
-          if [ "$CURRENT_HOUR" == "09" ]; then
+          if [ "$CURRENT_HOUR" == "09" ] && [ "$CURRENT_HOUR" -le "11" ]; then
+            echo "Email Send"
             python dev/Schedule.py send
           else
             python dev/Schedule.py

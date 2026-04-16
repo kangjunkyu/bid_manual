@@ -18,15 +18,17 @@ NAVER_ID = os.getenv("NAVER_ID")
 NAVER_PW = os.getenv("NAVER_PW")
 API_KEY = os.getenv("API_KEY")
 
+
 def load_config():
-    with open('dev/config.json', 'r', encoding='utf-8') as f:
+    with open("dev/config.json", "r", encoding="utf-8") as f:
         return json.load(f)
-    
+
+
 config = load_config()
 
-KEYWORDS = config['KEYWORDS']
-NEGATIVE_KEYWORDS = config['NEGATIVE_KEYWORDS']
-EXCLUDE_CONTRACTS = config['EXCLUDE_CONTRACTS']
+KEYWORDS = config["KEYWORDS"]
+NEGATIVE_KEYWORDS = config["NEGATIVE_KEYWORDS"]
+EXCLUDE_CONTRACTS = config["EXCLUDE_CONTRACTS"]
 
 ENDPOINTS = {
     "물품": "/getBidPblancListInfoThngPPSSrch",
@@ -36,31 +38,40 @@ ENDPOINTS = {
     "기타": "/getBidPblancListInfoEtcPPSSrch",
 }
 
+NURI_ENDPOINTS = {
+    "민간_물품": "/getPrvtBidPblancListInfoThngPPSSrch",
+    "민간_용역": "/getPrvtBidPblancListInfoServcPPSSrch",
+    "민간_공사": "/getPrvtBidPblancListInfoCnstwkPPSSrch",
+    "민간_기타": "/getPrvtBidPblancListInfoEtcPPSSrch",
+}
+
 BASE_URL = "http://apis.data.go.kr/1230000/ad/BidPublicInfoService"
 BIZINFO_URL = (
     "http://apis.data.go.kr/1721000/msitannouncementinfo/businessAnnouncMentList"
 )
+NURI_BASE_URL = "http://apis.data.go.kr/1230000/ao/PrvtBidNtceService"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
 }
 
-    
+
 def get_session():
     session = requests.Session()
     session.headers.update(HEADERS)
-    
+
     retry = Retry(
         total=3,
         backoff_factor=1,
         status_forcelist=[500, 502, 503, 504],
-        raise_on_status=False
+        raise_on_status=False,
     )
     adapter = HTTPAdapter(max_retries=retry)
-    session.mount('http://', adapter)
-    session.mount('https://', adapter)
-    
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
     return session
+
 
 def init_db():
     conn = sqlite3.connect("sent_list.db")
@@ -211,6 +222,64 @@ def get_bizinfo_data():
         print(f"기업마당 에러 발생: {e}")
     return all_items
 
+
+def get_nuri_data():
+    all_items = []
+    session = get_session()
+    now = datetime.now()
+    yesterday = now - timedelta(days=1)
+
+    n = now.strftime("%Y%m%d%H%M")
+    y = yesterday.strftime("%Y%m%d%H%M")
+
+    for category, path in NURI_ENDPOINTS.items():
+        page_no = 1
+        while True:
+            params = {
+                "serviceKey": API_KEY,
+                "numOfRows": "999",
+                "pageNo": str(page_no),
+                "inqryDiv": "1",
+                "inqryBgnDt": y,
+                "inqryEndDt": n,
+                "type": "json",
+            }
+
+            try:
+                response = session.get(NURI_BASE_URL + path, params=params, timeout=30)
+                # print(response)
+                if response.status_code == 200:
+                    data = response.json()
+                    body = data.get("response", {}).get("body", {})
+                    items = body.get("items", [])
+                    total_count = int(body.get("totalCount", 0))
+
+                    if not items:
+                        break
+
+                    if isinstance(items, dict):
+                        items = [items]
+
+                    for i in items:
+                        i["category"] = category
+                        all_items.append(i)
+
+                    # 현재 페이지까지 수집된 항목이 전체 개수보다 크면 중단
+                    if (
+                        len([x for x in all_items if x["category"] == category])
+                        >= total_count
+                    ):
+                        break
+                    page_no += 1
+                else:
+                    break
+            except Exception as e:
+                print(f"누리장터 {category} 에러: {e}")
+                break
+
+    return all_items
+
+
 def send_naver_email(content_html):
     global NAVER_ID, NAVER_PW
 
@@ -250,9 +319,10 @@ def main():
 
     nara_raw = get_combined_data()
     biz_raw = get_bizinfo_data()
+    nuri_raw = get_nuri_data()
 
-    categorized_results = {kw: {"nara": [], "gov": []} for kw in KEYWORDS}
-    categorized_results["기타 지원사업"] = {"nara": [], "gov": []}
+    categorized_results = {kw: {"nara": [], "gov": [], "nuri": []} for kw in KEYWORDS}
+    categorized_results["기타 지원사업"] = {"nara": [], "gov": [], "nuri": []}
 
     for item in nara_raw:
         bid_nm = item.get("bidNtceNm", "")
@@ -314,7 +384,48 @@ def main():
                 }
             )
 
-    has_content = any(src["nara"] or src["gov"] for src in categorized_results.values())
+    for item in nuri_raw:
+        bid_nm = item.get("ntceNm", "")
+        bid_id = f"{item.get('bidNtceNo')}-{item.get('bidNtceOrd', '00')}"
+        if item.get("ntceDivNm") == "취소공고":
+            continue
+        if any(nk in bid_nm for nk in NEGATIVE_KEYWORDS):
+            continue
+
+        matched_kw = None
+        for kw in KEYWORDS:
+            if kw in bid_nm:
+                matched_kw = kw
+                break
+
+        if matched_kw:
+            if not is_already_stored(bid_id):
+                save_bid_to_db(bid_id)
+
+            if is_not_yet_sent(bid_id):
+                detail_url = (
+                    item.get("ntceSpecDocUrl1")
+                    or "https://www.g2b.go.kr/pt/menu/selectSubFrame.do?framesrc=/pt/menu/frameTgong.do"
+                )
+
+                categorized_results[matched_kw]["nuri"].append(
+                    {
+                        "category": item.get(
+                            "bidNtceClsfc", "민간입찰"
+                        ), 
+                        "title": bid_nm,
+                        "org": item.get("ntceInsttNm"),  
+                        "url": detail_url,
+                        "end": item.get("bidClseDt")
+                        or item.get(
+                            "opengDt"
+                        ), 
+                    }
+                )
+
+    has_content = any(
+        src["nara"] or src["gov"] or src["nuri"] for src in categorized_results.values()
+    )
 
     if is_mail_time:
         if has_content:
